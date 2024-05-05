@@ -7,7 +7,7 @@ def main():
     database.populare_tabele()
 
     id_cheie = 1
-    cale_fisier = os.path.expanduser('~/test.txt')
+    cale_fisier = os.path.expanduser('fisiere/test1.txt')
 
     # Criptare
     print("Începe criptarea...")

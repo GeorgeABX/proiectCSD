@@ -59,11 +59,11 @@ def proceseaza_fisiere():
 def afiseaza_continut_fisier(nume_fisier):
     print(f"Conținutul fișierului {nume_fisier}:")
     try:
-        with open(nume_fisier, 'r') as fisier:
-            print(fisier.read())
+        with open(nume_fisier, 'rb') as fisier:  # Deschide ca binar
+            continut = fisier.read()
+            print(continut.decode('utf-8', errors='replace'))  # Încearcă să decodezi ca UTF-8, înlocuiește erorile
     except Exception as e:
         print(f"Eroare la citirea fișierului {nume_fisier}: {e}")
-
 
 def afiseaza_continut_fisier_hex(nume_fisier):
     print(f"Conținutul fișierului {nume_fisier} (hex):")
@@ -73,3 +73,4 @@ def afiseaza_continut_fisier_hex(nume_fisier):
             print(continut.hex())
     except Exception as e:
         print(f"Eroare la citirea fișierului {nume_fisier}: {e}")
+
