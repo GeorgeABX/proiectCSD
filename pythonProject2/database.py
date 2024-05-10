@@ -99,9 +99,13 @@ def populare_chei():
 
 def populare_fisiere():
     # Asumând că utilizatorul este pe Linux/macOS și că fișierul este în directorul home
-    home_path = os.path.expanduser('~')  # Acesta va returna calea către directorul home al utilizatorului curent
+    proiect_path = os.path.dirname(__file__)  # Calea către directorul în care se află scriptul curent
+    fisiere_path = os.path.join(proiect_path, 'fisiere')  # Calea către subdirectorul "fisiere"
+
     valori_fisiere = [
-        ('test.txt', f'{home_path}/test.txt', 'criptare', '2024-03-25 10:00:00', 1),
+        ('test.txt', os.path.join(fisiere_path, 'test.txt'), 'criptare', '2024-03-25 10:00:00', 1),
+        ('test1.txt', os.path.join(fisiere_path, 'test1.txt'), 'criptare', '2024-03-25 10:00:00', 2),
+
         # Poți adăuga mai multe fișiere aici dacă este necesar
     ]
 

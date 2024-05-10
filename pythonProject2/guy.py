@@ -14,11 +14,12 @@ class CryptoApp(tk.Tk):
         self.file_processing = file_processing
         self.create_widgets()
         self.populate_keys_dropdown()
+        self.populate_files_dropdown()  # Populează dropdown-ul cu fișiere
 
     def create_widgets(self):
-        # Selectare fișier
-        self.label_file = tk.Label(self, text="Niciun fișier selectat")
-        self.label_file.pack(pady=10)
+        self.file_var = tk.StringVar(self)
+        self.dropdown_files = tk.OptionMenu(self, self.file_var, "")
+        self.dropdown_files.pack(pady=10)
 
         self.button_open = tk.Button(self, text="Deschide Fișier", command=self.open_file)
         self.button_open.pack()
@@ -51,6 +52,18 @@ class CryptoApp(tk.Tk):
         self.log.insert(END, message)
         self.log.see(END)  # Scroll to the bottom
 
+    def populate_files_dropdown(self):
+        # Preia fișierele din baza de date
+        self.database.conn.row_factory = lambda cursor, row: row[0]
+        cursor = self.database.conn.cursor()
+        files = cursor.execute('SELECT nume_fisier FROM fisiere').fetchall()
+        menu = self.dropdown_files['menu']
+        menu.delete(0, 'end')
+        for file in files:
+            menu.add_command(label=file, command=lambda value=file: self.file_var.set(value))
+        if files:
+            self.file_var.set(files[0])  # Setează primul fișier ca implicit
+
     def open_file(self):
         # Setează directorul inițial la directorul curent al proiectului
         project_directory = os.path.dirname(os.path.realpath(__file__))
@@ -72,42 +85,62 @@ class CryptoApp(tk.Tk):
             self.key_var.set(keys[0])  # Set the first key as default
 
     def encrypt_file(self):
-        if not self.filename or not self.key_var.get():
+        if not self.file_var.get() or not self.key_var.get():
             messagebox.showerror("Eroare", "Selectează un fișier și o cheie!")
             return
+
+        file_name = self.file_var.get()
         key_id = int(self.key_var.get())
-        # Apelul funcției de criptare și gestionarea răspunsului
+        # Obține id_fisier și cale_fisier direct din baza de date bazat pe numele fișierului selectat din dropdown
+        id_fisier, cale_fisier = self.database.cursor.execute(
+            'SELECT id_fisier, cale_fisier FROM fisiere WHERE nume_fisier = ?', (file_name,)).fetchone()
+
         try:
-            timp_executie, memorie_utilizata, content_hex = self.file_processing.cripteaza_si_logheaza(None,
-                                                                                                       self.filename,
+            # Criptează fișierul și loghează performanța
+            timp_executie, memorie_utilizata, content_hex = self.file_processing.cripteaza_si_logheaza(id_fisier,
+                                                                                                       cale_fisier,
                                                                                                        key_id,
                                                                                                        self.log_message)
+            # Actualizează statusul în baza de date la 'criptat'
+            self.database.cursor.execute('UPDATE fisiere SET status = ? WHERE id_fisier = ?', ('criptat', id_fisier))
+            self.database.conn.commit()
+            # Logare mesaj de succes
             self.log_message(f"Fișierul a fost criptat. Timp executie: {timp_executie} secunde")
-            self.log_message(
-                f"Conținut criptat (hex): {content_hex[:60]}...")  # Afișează primele 60 de caractere din conținutul hex
-
+            self.log_message(f"Conținut criptat (hex): {content_hex[:60]}...")
         except Exception as e:
             self.log_message(f"Error: {str(e)}")
-            return 0, 0, ""
 
     def decrypt_file(self):
-        if not self.filename or not self.key_var.get():
+        if not self.file_var.get() or not self.key_var.get():
             messagebox.showerror("Eroare", "Selectează un fișier și o cheie!")
             return
+
+        file_name = self.file_var.get()  # Numele fișierului original din dropdown
         key_id = int(self.key_var.get())
+
         try:
-            timp_executie, _, decrypted_content = self.file_processing.decripteaza_si_logheaza(None,
-                                                                                               self.filename + '.enc',
-                                                                                               key_id,
-                                                                                               self.log_message)
-            if decrypted_content:
+            # Obține calea originală a fișierului pentru a construi calea fișierului criptat
+            cale_fisier_original, id_fisier = self.database.cursor.execute(
+                'SELECT cale_fisier, id_fisier FROM fisiere WHERE nume_fisier = ?', (file_name,)).fetchone()
+            cale_fisier_enc = cale_fisier_original + '.enc'  # Presupunem că fișierul criptat se află în aceeași locație
+
+            # Decriptează fișierul și loghează performanța
+            timp_executie, memorie_utilizata, content_decriptat = self.file_processing.decripteaza_si_logheaza(
+                id_fisier, cale_fisier_enc, key_id, self.log_message)
+
+            # Actualizează statusul în baza de date la 'decriptat'
+            self.database.cursor.execute('UPDATE fisiere SET status = ? WHERE id_fisier = ?', ('decriptat', id_fisier))
+            self.database.conn.commit()
+
+            # Logare mesaj de succes
+            if content_decriptat:
                 try:
-                    decoded_content = decrypted_content.decode('utf-8')
+                    decoded_content = content_decriptat.decode('utf-8')
                     self.log_message(
                         f"Fișierul a fost decriptat. Timp executie: {timp_executie} secunde. Conținut decriptat: {decoded_content}")
                 except UnicodeDecodeError:
                     self.log_message(
-                        f"Fișierul a fost decriptat. Timp executie: {timp_executie} secunde. Conținut decriptat (hex): {decrypted_content.hex()}")
+                        f"Fișierul a fost decriptat. Timp executie: {timp_executie} secunde. Conținut decriptat (hex): {content_decriptat.hex()}")
             else:
                 self.log_message("Fișierul nu a putut fi decriptat.")
         except Exception as e:
