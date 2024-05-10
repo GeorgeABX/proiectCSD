@@ -23,6 +23,10 @@ class CryptoApp(tk.Tk):
         self.button_open = tk.Button(self, text="Deschide Fișier", command=self.open_file)
         self.button_open.pack()
 
+        # Label pentru confirmarea încărcării fișierului
+        self.label_confirmation = tk.Label(self, text="", fg="green")
+        self.label_confirmation.pack(pady=10)
+
         # Selectare cheie
         self.key_var = tk.StringVar(self)
         self.dropdown_keys = tk.OptionMenu(self, self.key_var, "")
@@ -48,9 +52,12 @@ class CryptoApp(tk.Tk):
         self.log.see(END)  # Scroll to the bottom
 
     def open_file(self):
-        self.filename = filedialog.askopenfilename(initialdir=os.path.expanduser('~'), title="Selectează fișier")
+        # Setează directorul inițial la directorul curent al proiectului
+        project_directory = os.path.dirname(os.path.realpath(__file__))
+        self.filename = filedialog.askopenfilename(initialdir=project_directory, title="Selectează fișier")
         if self.filename:
-            self.label_file.config(text=f"Fișier selectat: {self.filename}")
+            self.label_file.config(text=f"Fișier selectat: {os.path.basename(self.filename)}")
+            self.label_confirmation.config(text="Fișier încărcat cu succes!")  # Afisează confirmarea
 
     def populate_keys_dropdown(self):
         # Preia cheile din baza de date
@@ -69,22 +76,42 @@ class CryptoApp(tk.Tk):
             messagebox.showerror("Eroare", "Selectează un fișier și o cheie!")
             return
         key_id = int(self.key_var.get())
-        print("Începe criptarea...")
-        self.file_processing.cripteaza_si_logheaza(None, self.filename, key_id)
-        print("Fișierul a fost criptat.")
-        self.file_processing.afiseaza_continut_fisier_hex(f"{self.filename}.enc")
-        self.log_message(f"Fișierul {self.filename} a fost criptat.")
+        # Apelul funcției de criptare și gestionarea răspunsului
+        try:
+            timp_executie, memorie_utilizata, content_hex = self.file_processing.cripteaza_si_logheaza(None,
+                                                                                                       self.filename,
+                                                                                                       key_id,
+                                                                                                       self.log_message)
+            self.log_message(f"Fișierul a fost criptat. Timp executie: {timp_executie} secunde")
+            self.log_message(
+                f"Conținut criptat (hex): {content_hex[:60]}...")  # Afișează primele 60 de caractere din conținutul hex
+
+        except Exception as e:
+            self.log_message(f"Error: {str(e)}")
+            return 0, 0, ""
 
     def decrypt_file(self):
         if not self.filename or not self.key_var.get():
             messagebox.showerror("Eroare", "Selectează un fișier și o cheie!")
             return
         key_id = int(self.key_var.get())
-        print("Începe decriptarea...")
-        self.file_processing.decripteaza_si_logheaza(None, self.filename + '.enc', key_id)
-        print("Fișierul a fost decriptat.")
-        self.log_message(f"Fișierul {self.filename} a fost decriptat.")
-        self.file_processing.afiseaza_continut_fisier(self.filename)
+        try:
+            timp_executie, _, decrypted_content = self.file_processing.decripteaza_si_logheaza(None,
+                                                                                               self.filename + '.enc',
+                                                                                               key_id,
+                                                                                               self.log_message)
+            if decrypted_content:
+                try:
+                    decoded_content = decrypted_content.decode('utf-8')
+                    self.log_message(
+                        f"Fișierul a fost decriptat. Timp executie: {timp_executie} secunde. Conținut decriptat: {decoded_content}")
+                except UnicodeDecodeError:
+                    self.log_message(
+                        f"Fișierul a fost decriptat. Timp executie: {timp_executie} secunde. Conținut decriptat (hex): {decrypted_content.hex()}")
+            else:
+                self.log_message("Fișierul nu a putut fi decriptat.")
+        except Exception as e:
+            self.log_message(f"Eroare la decriptare: {str(e)}")
 
 
 if __name__ == "__main__":

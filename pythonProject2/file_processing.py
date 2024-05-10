@@ -16,32 +16,55 @@ def executa_comanda_openssl(comanda):
 
 
 def cripteaza_fisier(nume_fisier, cheie, algoritm):
-    comanda = f'openssl enc -aes-256-cbc -salt -in {nume_fisier} -out {nume_fisier}.enc -pass pass:{cheie}'
-    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
-    return timp_executie, memorie_utilizata
+    comanda = f'openssl enc -aes-256-cbc -salt -in "{nume_fisier}" -out "{nume_fisier}.enc" -pass pass:{cheie}'
+    start_time = time.time()  # Inițializează start_time înainte de a rula comanda
+    subprocess.run(comanda, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    timp_executie = time.time() - start_time  # Calculează timpul de execuție după rularea comenzii
+    with open(f"{nume_fisier}.enc", 'rb') as file:
+        content = file.read()
+    return timp_executie, 0, content.hex()  # Returnează timpul de execuție, memoria (0 aici), și conținutul criptat în hex
+
 
 
 def decripteaza_fisier(nume_fisier_enc, cheie, algoritm):
-    comanda = f'openssl enc -d -aes-256-cbc -in "{nume_fisier_enc}" -out "{nume_fisier_enc.replace(".enc", "")}" -pass pass:{cheie}'
+    output_file = nume_fisier_enc.replace(".enc", "")
+    comanda = f'openssl enc -d -aes-256-cbc -in "{nume_fisier_enc}" -out "{output_file}" -pass pass:{cheie}'
+    start_time = time.time()
+    subprocess.run(comanda, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    timp_executie = time.time() - start_time
+    with open(output_file, 'rb') as file:
+        content = file.read()
+    return timp_executie, 0, content  # Returnează timpul de execuție, memoria (0 aici), și conținutul decriptat
 
-    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
-    return timp_executie, memorie_utilizata
+
+def cripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie, logger):
+    try:
+        valoare_cheie, nume_algoritm = preia_informatii_cheie(id_cheie)
+        algoritm = nume_algoritm.lower()
+        logger(f"Începe criptarea fișierului {cale_fisier}")
+        timp_executie, memorie_utilizata, content_hex = cripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
+        logare_performanta(id_fisier, timp_executie, memorie_utilizata)
+        actualizeaza_status_fisier(id_fisier, 'criptat')
+        return timp_executie, memorie_utilizata, content_hex
+    except Exception as e:
+        logger(f"Error: {str(e)}")
+        return 0, 0, ""
 
 
-
-def cripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie):
+def decripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie, logger):
     valoare_cheie, nume_algoritm = preia_informatii_cheie(id_cheie)
     algoritm = nume_algoritm.lower()
-    timp_executie, memorie_utilizata = cripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
-    logare_performanta(id_fisier, timp_executie, memorie_utilizata)
-    actualizeaza_status_fisier(id_fisier, 'criptat')
+    logger(f"Începe decriptarea fișierului {cale_fisier}")
+    try:
+        timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
+        logare_performanta(id_fisier, timp_executie, memorie_utilizata)
+        actualizeaza_status_fisier(id_fisier, 'decriptat')
+        return timp_executie, memorie_utilizata, content_decriptat
+    except Exception as e:
+        logger(f"Error: {str(e)}")
+        return 0, 0, b""
 
-def decripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie):
-    valoare_cheie, nume_algoritm = preia_informatii_cheie(id_cheie)
-    algoritm = nume_algoritm.lower()
-    timp_executie, memorie_utilizata = decripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
-    logare_performanta(id_fisier, timp_executie, memorie_utilizata)
-    actualizeaza_status_fisier(id_fisier, 'decriptat')
+
 
 def proceseaza_fisiere():
     cursor.execute("SELECT id_fisier, cale_fisier, id_cheie, tip_operatie FROM fisiere WHERE status = 'necriptat'")
