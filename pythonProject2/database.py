@@ -1,14 +1,12 @@
 import sqlite3
-import os
+import subprocess
 
 conn = sqlite3.connect('baza_de_date.db')
 cursor = conn.cursor()
 
-# Funcție pentru a verifica dacă o tabelă există deja
 def table_exists(table_name):
     cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
     return cursor.fetchone() is not None
-
 
 def creare_tabele():
     if not table_exists('algoritmi'):
@@ -21,7 +19,6 @@ def creare_tabele():
             )
         ''')
 
-    # Creare tabel pentru chei
     if not table_exists('chei'):
         cursor.execute('''
             CREATE TABLE chei (
@@ -32,7 +29,6 @@ def creare_tabele():
             )
         ''')
 
-    # Creare tabel pentru fisiere
     if not table_exists('fisiere'):
         cursor.execute('''
             CREATE TABLE fisiere (
@@ -47,7 +43,6 @@ def creare_tabele():
             )
         ''')
 
-    # Creare tabel pentru performanta
     if not table_exists('performanta'):
         cursor.execute('''
             CREATE TABLE performanta (
@@ -58,76 +53,47 @@ def creare_tabele():
                 FOREIGN KEY (id_fisier) REFERENCES fisiere(id_fisier)
             )
         ''')
-def populare_tabele():
-    populare_algoritmi()
-    populare_chei()
-    populare_fisiere()
-    populare_performanta()
 
 def populare_algoritmi():
-    # Definirea listei de valori pentru a fi inserate
     valori_algoritmi = [
-        ('AES', 'simetric', 128), #192,256
-        ('Blowfish', 'simetric', 32), #up to 448
-        ('Camellia', 'simetric', 128), #192,256
+        ('AES', 'simetric', 256),
+        ('Blowfish', 'simetric', 128),
+        ('Camellia', 'simetric', 256),
         ('DES', 'simetric', 56),
-        ('RC4', 'simetric', 40), #up to 2048
-        ('RC5', 'simetric', 128), #up to 2048
-        ('RSA', 'asimetric' ,2048),
+        ('RSA', 'asimetric', 2048),
     ]
-
-    # Inserarea valorilor în tabelul algoritmi
     cursor.executemany('''
         INSERT INTO algoritmi (nume, tip, lungime_cheie) 
         VALUES (?, ?, ?)
     ''', valori_algoritmi)
+    conn.commit()
 
-def populare_chei():
-    # Definirea listei de valori pentru a fi inserate
-    valori_chei = [
-        ('cheie1', 1),  # Exemplu de cheie pentru algoritmul cu id_algoritm 1
-        ('cheie2', 1),  # Exemplu de cheie pentru algoritmul cu id_algoritm 1
-        ('cheie3', 4),  # Exemplu de cheie pentru algoritmul cu id_algoritm 4
-        # Mai multe chei pot fi adăugate aici
-    ]
-
-    # Inserarea valorilor în tabelul chei
-    cursor.executemany('''
+def adauga_cheie_simetrica(valoare_cheie, id_algoritm):
+    cursor.execute('''
         INSERT INTO chei (valoare_cheie, id_algoritm) 
         VALUES (?, ?)
-    ''', valori_chei)
+    ''', (valoare_cheie, id_algoritm))
+    conn.commit()
 
-def populare_fisiere():
-    # Asumând că utilizatorul este pe Linux/macOS și că fișierul este în directorul home
-    proiect_path = os.path.dirname(__file__)  # Calea către directorul în care se află scriptul curent
-    fisiere_path = os.path.join(proiect_path, 'fisiere')  # Calea către subdirectorul "fisiere"
+def adauga_cheie_rsa(dimensiune_cheie=2048):
+    private_key_pem, public_key_pem = genereaza_chei_rsa(dimensiune_cheie)
+    cursor.execute('''
+        INSERT INTO chei (valoare_cheie, id_algoritm) 
+        VALUES (?, ?)
+    ''', (private_key_pem.decode(), 5))  # 5 este ID-ul pentru RSA în tabelul algoritmi
+    conn.commit()
+    return private_key_pem, public_key_pem
 
-    valori_fisiere = [
-        ('test.txt', os.path.join(fisiere_path, 'test.txt'), 'criptare', '2024-03-25 10:00:00', 1),
-        ('test1.txt', os.path.join(fisiere_path, 'test1.txt'), 'criptare', '2024-03-25 10:00:00', 2),
+def genereaza_chei_rsa(dimensiune_cheie=2048):
+    private_key = subprocess.check_output(f'openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:{dimensiune_cheie}', shell=True)
+    public_key = subprocess.check_output('openssl rsa -pubout -in private_key.pem -out public_key.pem', shell=True)
 
-        # Poți adăuga mai multe fișiere aici dacă este necesar
-    ]
+    with open("private_key.pem", "rb") as priv_file:
+        private_key_pem = priv_file.read()
+    with open("public_key.pem", "rb") as pub_file:
+        public_key_pem = pub_file.read()
 
-    # Inserarea valorilor în tabelul fisiere
-    cursor.executemany('''
-        INSERT INTO fisiere (nume_fisier, cale_fisier, tip_operatie, timestamp, id_cheie) 
-        VALUES (?, ?, ?, ?, ?)
-    ''', valori_fisiere)
-def populare_performanta():
-    cursor.execute('DELETE FROM performanta')  # Adaugă această linie pentru a goli tabelul
-    valori_performanta = [
-        (1, 0.5, 1024),  # Exemplu de performanță pentru fișierul cu id_fisier 1
-        (2, 1.2, 2048),  # Exemplu de performanță pentru fișierul cu id_fisier 2
-        (3, 0.8, 1536),  # Exemplu de performanță pentru fișierul cu id_fisier 3
-        # Mai multe performanțe pot fi adăugate aici
-    ]
-
-    # Inserarea valorilor în tabelul performanta
-    cursor.executemany('''
-        INSERT INTO performanta (id_fisier, timp_executie, memorie_utilizata) 
-        VALUES (?, ?, ?)
-    ''', valori_performanta)
+    return private_key_pem, public_key_pem
 
 def preia_informatii_cheie(id_cheie):
     cursor.execute('''
@@ -141,12 +107,10 @@ def preia_informatii_cheie(id_cheie):
 def logare_performanta(id_fisier, timp_executie, memorie_utilizata):
     cursor.execute('SELECT id_fisier FROM performanta WHERE id_fisier = ?', (id_fisier,))
     if cursor.fetchone():
-        # Actualizează înregistrarea existentă
         cursor.execute('''
             UPDATE performanta SET timp_executie = ?, memorie_utilizata = ? WHERE id_fisier = ?
         ''', (timp_executie, memorie_utilizata, id_fisier))
     else:
-        # Inserează o nouă înregistrare
         cursor.execute('''
             INSERT INTO performanta (id_fisier, timp_executie, memorie_utilizata)
             VALUES (?, ?, ?)
@@ -158,3 +122,42 @@ def actualizeaza_status_fisier(id_fisier, status_nou):
         SET status = ?
         WHERE id_fisier = ?
     ''', (status_nou, id_fisier))
+    conn.commit()
+
+def populare_tabele():
+    populare_algoritmi()
+
+    # Adăugare chei simetrice
+    aes_keys = ['thisisaverysecurekey1234567890', 'anothersecurekey1234567890']
+    blowfish_keys = ['simplekey123', 'anotherblowfishkey123']
+    camellia_keys = ['securecamelliakey256bitkey1234', 'anothercamelliakey123456']
+    des_keys = ['shortkey', 'anotherdeskey']
+
+    cursor.execute("SELECT id_algoritm FROM algoritmi WHERE nume = 'AES'")
+    aes_id = cursor.fetchone()[0]
+    for key in aes_keys:
+        adauga_cheie_simetrica(key, aes_id)
+
+    cursor.execute("SELECT id_algoritm FROM algoritmi WHERE nume = 'Blowfish'")
+    blowfish_id = cursor.fetchone()[0]
+    for key in blowfish_keys:
+        adauga_cheie_simetrica(key, blowfish_id)
+
+    cursor.execute("SELECT id_algoritm FROM algoritmi WHERE nume = 'Camellia'")
+    camellia_id = cursor.fetchone()[0]
+    for key in camellia_keys:
+        adauga_cheie_simetrica(key, camellia_id)
+
+    cursor.execute("SELECT id_algoritm FROM algoritmi WHERE nume = 'DES'")
+    des_id = cursor.fetchone()[0]
+    for key in des_keys:
+        adauga_cheie_simetrica(key, des_id)
+
+    # Adăugare chei RSA
+    for _ in range(2):
+        adauga_cheie_rsa()
+
+# Populează baza de date
+if __name__ == "__main__":
+    creare_tabele()
+    populare_tabele()

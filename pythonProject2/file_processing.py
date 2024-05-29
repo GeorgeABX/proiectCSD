@@ -1,40 +1,116 @@
 import subprocess
 import time
+import psutil
 from database import preia_informatii_cheie, logare_performanta, actualizeaza_status_fisier, cursor
-import database
+
 
 def executa_comanda_openssl(comanda):
     start_time = time.time()
-    subprocess.run(comanda, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(comanda, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ps_process = psutil.Process(process.pid)
+
+    max_memory = 0
+    while process.poll() is None:  # În timp ce procesul rulează
+        try:
+            memory_info = ps_process.memory_info()
+            max_memory = max(max_memory, memory_info.rss / 1024)  # Actualizează memoria maximă în KB
+        except psutil.NoSuchProcess:
+            break  # Procesul s-a terminat
+
+    process.communicate()  # Așteaptă terminarea procesului
     end_time = time.time()
+
     timp_executie = end_time - start_time
-
-    # Omite partea cu măsurarea memoriei pentru moment
-    memorie_utilizata = 0  # Aici ar putea fi o valoare estimată sau lăsată la 0 dacă nu este relevantă
-
-    return timp_executie, memorie_utilizata
+    return timp_executie, max_memory
 
 
-def cripteaza_fisier(nume_fisier, cheie, algoritm):
+def cripteaza_fisier_aes(nume_fisier, cheie):
     comanda = f'openssl enc -aes-256-cbc -salt -in "{nume_fisier}" -out "{nume_fisier}.enc" -pass pass:{cheie}'
-    start_time = time.time()  # Inițializează start_time înainte de a rula comanda
-    subprocess.run(comanda, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    timp_executie = time.time() - start_time  # Calculează timpul de execuție după rularea comenzii
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
     with open(f"{nume_fisier}.enc", 'rb') as file:
         content = file.read()
-    return timp_executie, 0, content.hex()  # Returnează timpul de execuție, memoria (0 aici), și conținutul criptat în hex
+    return timp_executie, memorie_utilizata, content.hex()
 
 
-
-def decripteaza_fisier(nume_fisier_enc, cheie, algoritm):
+def decripteaza_fisier_aes(nume_fisier_enc, cheie):
     output_file = nume_fisier_enc.replace(".enc", "")
     comanda = f'openssl enc -d -aes-256-cbc -in "{nume_fisier_enc}" -out "{output_file}" -pass pass:{cheie}'
-    start_time = time.time()
-    subprocess.run(comanda, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    timp_executie = time.time() - start_time
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
     with open(output_file, 'rb') as file:
         content = file.read()
-    return timp_executie, 0, content  # Returnează timpul de execuție, memoria (0 aici), și conținutul decriptat
+    return timp_executie, memorie_utilizata, content
+
+
+def cripteaza_fisier_blowfish(nume_fisier, cheie):
+    comanda = f'openssl enc -bf -salt -in "{nume_fisier}" -out "{nume_fisier}.enc" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(f"{nume_fisier}.enc", 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content.hex()
+
+
+def decripteaza_fisier_blowfish(nume_fisier_enc, cheie):
+    output_file = nume_fisier_enc.replace(".enc", "")
+    comanda = f'openssl enc -d -bf -in "{nume_fisier_enc}" -out "{output_file}" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(output_file, 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content
+
+
+def cripteaza_fisier_camellia(nume_fisier, cheie):
+    comanda = f'openssl enc -camellia-256-cbc -salt -in "{nume_fisier}" -out "{nume_fisier}.enc" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(f"{nume_fisier}.enc", 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content.hex()
+
+
+def decripteaza_fisier_camellia(nume_fisier_enc, cheie):
+    output_file = nume_fisier_enc.replace(".enc", "")
+    comanda = f'openssl enc -d -camellia-256-cbc -in "{nume_fisier_enc}" -out "{output_file}" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(output_file, 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content
+
+
+def cripteaza_fisier_des(nume_fisier, cheie):
+    comanda = f'openssl enc -des-cbc -salt -in "{nume_fisier}" -out "{nume_fisier}.enc" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(f"{nume_fisier}.enc", 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content.hex()
+
+
+def decripteaza_fisier_des(nume_fisier_enc, cheie):
+    output_file = nume_fisier_enc.replace(".enc", "")
+    comanda = f'openssl enc -d -des-cbc -in "{nume_fisier_enc}" -out "{output_file}" -pass pass:{cheie}'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(output_file, 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content
+
+
+def cripteaza_fisier_rsa(nume_fisier, cheie_publica):
+    with open("public_key.pem", "wb") as file:
+        file.write(cheie_publica.encode())
+    comanda = f'openssl rsautl -encrypt -inkey public_key.pem -pubin -in "{nume_fisier}" -out "{nume_fisier}.enc"'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(f"{nume_fisier}.enc", 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content.hex()
+
+
+def decripteaza_fisier_rsa(nume_fisier_enc, cheie_privata):
+    with open("private_key.pem", "wb") as file:
+        file.write(cheie_privata.encode())
+    output_file = nume_fisier_enc.replace(".enc", "")
+    comanda = f'openssl rsautl -decrypt -inkey private_key.pem -in "{nume_fisier_enc}" -out "{output_file}"'
+    timp_executie, memorie_utilizata = executa_comanda_openssl(comanda)
+    with open(output_file, 'rb') as file:
+        content = file.read()
+    return timp_executie, memorie_utilizata, content
 
 
 def cripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie, logger):
@@ -42,7 +118,20 @@ def cripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie, logger):
         valoare_cheie, nume_algoritm = preia_informatii_cheie(id_cheie)
         algoritm = nume_algoritm.lower()
         logger(f"Începe criptarea fișierului {cale_fisier}")
-        timp_executie, memorie_utilizata, content_hex = cripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
+
+        if algoritm == "aes":
+            timp_executie, memorie_utilizata, content_hex = cripteaza_fisier_aes(cale_fisier, valoare_cheie)
+        elif algoritm == "blowfish":
+            timp_executie, memorie_utilizata, content_hex = cripteaza_fisier_blowfish(cale_fisier, valoare_cheie)
+        elif algoritm == "camellia":
+            timp_executie, memorie_utilizata, content_hex = cripteaza_fisier_camellia(cale_fisier, valoare_cheie)
+        elif algoritm == "des":
+            timp_executie, memorie_utilizata, content_hex = cripteaza_fisier_des(cale_fisier, valoare_cheie)
+        elif algoritm == "rsa":
+            timp_executie, memorie_utilizata, content_hex = cripteaza_fisier_rsa(cale_fisier, valoare_cheie)
+        else:
+            raise ValueError("Algoritm necunoscut")
+
         logare_performanta(id_fisier, timp_executie, memorie_utilizata)
         actualizeaza_status_fisier(id_fisier, 'criptat')
         return timp_executie, memorie_utilizata, content_hex
@@ -56,44 +145,24 @@ def decripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie, logger):
     algoritm = nume_algoritm.lower()
     logger(f"Începe decriptarea fișierului {cale_fisier}")
     try:
-        timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier(cale_fisier, valoare_cheie, algoritm)
+        if algoritm == "aes":
+            timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier_aes(cale_fisier, valoare_cheie)
+        elif algoritm == "blowfish":
+            timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier_blowfish(cale_fisier,
+                                                                                              valoare_cheie)
+        elif algoritm == "camellia":
+            timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier_camellia(cale_fisier,
+                                                                                              valoare_cheie)
+        elif algoritm == "des":
+            timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier_des(cale_fisier, valoare_cheie)
+        elif algoritm == "rsa":
+            timp_executie, memorie_utilizata, content_decriptat = decripteaza_fisier_rsa(cale_fisier, valoare_cheie)
+        else:
+            raise ValueError("Algoritm necunoscut")
+
         logare_performanta(id_fisier, timp_executie, memorie_utilizata)
         actualizeaza_status_fisier(id_fisier, 'decriptat')
         return timp_executie, memorie_utilizata, content_decriptat
     except Exception as e:
         logger(f"Error: {str(e)}")
         return 0, 0, b""
-
-
-
-def proceseaza_fisiere():
-    cursor.execute("SELECT id_fisier, cale_fisier, id_cheie, tip_operatie FROM fisiere WHERE status = 'necriptat'")
-    for id_fisier, cale_fisier, id_cheie, _ in cursor.fetchall():  # Ignoră tip_operatie cu _
-        cripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie)
-
-    cursor.execute("SELECT id_fisier, cale_fisier, id_cheie, tip_operatie FROM fisiere WHERE status = 'criptat'")
-    for id_fisier, cale_fisier, id_cheie, tip_operatie in cursor.fetchall():
-        if tip_operatie == 'decriptare':  # Verifică dacă operația este de decriptare
-            decripteaza_si_logheaza(id_fisier, cale_fisier, id_cheie)
-
-
-
-
-def afiseaza_continut_fisier(nume_fisier):
-    print(f"Conținutul fișierului {nume_fisier}:")
-    try:
-        with open(nume_fisier, 'rb') as fisier:  # Deschide ca binar
-            continut = fisier.read()
-            print(continut.decode('utf-8', errors='replace'))  # Încearcă să decodezi ca UTF-8, înlocuiește erorile
-    except Exception as e:
-        print(f"Eroare la citirea fișierului {nume_fisier}: {e}")
-
-def afiseaza_continut_fisier_hex(nume_fisier):
-    print(f"Conținutul fișierului {nume_fisier} (hex):")
-    try:
-        with open(nume_fisier, 'rb') as fisier:
-            continut = fisier.read()
-            print(continut.hex())
-    except Exception as e:
-        print(f"Eroare la citirea fișierului {nume_fisier}: {e}")
-
